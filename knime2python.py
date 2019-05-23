@@ -45,6 +45,12 @@ class NodeRepository:
 
     class Manipulation:
         class Column:
+            class ConvertAndReplace:
+                @staticmethod
+                def column_rename(params, input_node):
+                    input_table = input_node.output_table
+                    return input_table.rename(index=str, columns=params["change_columns"])
+
             class Filter:
                 @staticmethod
                 def column_filter(params, input_node):
@@ -93,8 +99,6 @@ class NodeRepository:
                 @staticmethod
                 def group_by(params, input_node):
                     input_table = input_node.output_table
-                    input_table = input_table.groupby(
-                        params["group_columns"], as_index=False)
 
                     def list_agg(x):
                         return list(x)
@@ -117,18 +121,22 @@ class NodeRepository:
                         "append_elements": append_elements,
                         "union_count": union_count,
                     }
-                    manuel_aggregation = {}
-                    for i in params["manuel_aggregation"].keys():
-                        if type(params["manuel_aggregation"][i]) == list:
-                            manuel_aggregation[i] = [aggregation[x]
-                                                     for x in params["manuel_aggregation"][i]]
+                    manuel_aggregation = params["manuel_aggregation"]
+                    new_manuel_aggregation = {}
+                    drop_items = []
+                    for i in manuel_aggregation.keys():
+                        if type(manuel_aggregation[i]) == list:
+                            drop_items.append(i)
+                            for j in manuel_aggregation[i]:
+                                input_table[i+"_"+j] = input_table[i]
+                                new_manuel_aggregation[i +
+                                                       "_"+j] = aggregation[j]
                         else:
-                            manuel_aggregation[i] = aggregation[params["manuel_aggregation"][i]]
-                    input_table = input_table.agg(manuel_aggregation)
-                    if isinstance(input_table.keys(), pd.core.indexes.multi.MultiIndex):
-                        input_table.columns = [
-                            col[0] if col[-1] == '' else col[0]+"_"+col[-1] for col in input_table.columns.values]
-                    return input_table
+                            new_manuel_aggregation[i] = aggregation[manuel_aggregation[i]]
+                    input_table = input_table.drop(drop_items, axis=1)
+                    input_table = input_table.groupby(
+                        params["group_columns"], as_index=False)
+                    return input_table.agg(new_manuel_aggregation)
 
                 @staticmethod
                 def ungroup(params, input_node):
