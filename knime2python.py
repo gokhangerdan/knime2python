@@ -6,8 +6,10 @@ import numpy as np
 from sklearn.cluster import KMeans
 import operator
 import sys
+import warnings
 
 
+warnings.filterwarnings("ignore")
 sys.dont_write_bytecode = True
 
 
@@ -214,8 +216,13 @@ class NodeRepository:
                     port_1 = input_node["port_1"].output_table
                     labels = port_0[1].fit(
                         port_1.as_matrix(columns=port_0[0])).labels_
-                    labels = pd.DataFrame(labels, columns=["Cluster"])
-                    elements = list(set(labels["Cluster"].tolist()))
+                    cnt = []
+                    for i in port_1.keys():
+                        if i != "Cluster" and "Cluster" in i:
+                            cnt.append(i)
+                    cluster_col_name = "Cluster_" + str(len(cnt))
+                    labels = pd.DataFrame(labels, columns=[cluster_col_name])
+                    elements = list(set(labels[cluster_col_name].tolist()))
                     elements.sort()
                     labels = labels.replace(
                         elements, ["cluster_"+str(x) for x in elements])
