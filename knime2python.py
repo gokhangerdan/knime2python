@@ -14,19 +14,88 @@ sys.dont_write_bytecode = True
 
 
 class KnimeNode:
+    """
+    class knime2python.KnimeNode(func=None, params=None, input_node=None)
+
+    Parameters:
+    func: NodeRepository function (e.g. NodeRepository.IO.Read.csv_reader)
+    params: dict, default None
+    input_node: knime2python.KnimeNode, default None
+    """
+
     def __init__(self, func, params=None, input_node=None):
         self.output_table = func(params, input_node)
 
 
 class NodeRepository:
+    """
+    knime2python.NodeRepository
+
+    .IO
+        .Read
+            .csv_reader
+            .pmml_reader
+    .Manipulation
+        .Column
+            .ConvertAndReplace
+                .column_rename
+            .Filter
+                .column_filter
+        .Row
+            .Filter
+                .row_filter
+            .Transform
+                .group_by
+                .ungroup
+            .Other
+                .rule_engine
+    .OtherDataTypes
+        .TimeSeries
+            .Manipulate
+                .date_and_time_difference
+            .Transform
+                .string_to_date_and_time
+    .Analytics
+        .Mining
+            .Clustering
+                .cluster_assigner
+    .Scripting
+        .Python
+            .python_script
+    """
     class IO:
+        """
+        knime2python.NodeRepository.IO
+
+        .Read
+            .csv_reader
+            .pmml_reader
+        """
         class Read:
+            """
+            knime2python.IO.Read
+
+            .csv_reader
+            .pmml_reader
+            """
             @staticmethod
             def csv_reader(params, input_node):
+                """
+                knime2python.IO.Read.csv_reader
+
+                Parameters:
+                input_location: str
+                """
                 return pd.read_csv(params["input_location"])
 
             @staticmethod
             def pmml_reader(params, input_node):
+                """
+                knime2python.IO.Read.pmml_reader
+
+                Parameters:
+                input_location: str
+                """
                 xml_file = open(params["input_location"], "r").read()
                 a = dict(xmltodict.parse(xml_file))
                 clusters = a["PMML"]["ClusteringModel"]["Cluster"]
@@ -46,22 +115,95 @@ class NodeRepository:
                 return fields, kmeans
 
     class Manipulation:
+        """
+        knime2python.NodeRepository.Manipulation
+
+        .Column
+            .ConvertAndReplace
+                .column_rename
+            .Filter
+                .column_filter
+        .Row
+            .Filter
+                .row_filter
+            .Transform
+                .group_by
+                .ungroup
+            .Other
+                .rule_engine
+        """
         class Column:
+            """
+            knime2python.NodeRepository.Manipulation.Column
+
+            .ConvertAndReplace
+                .column_rename
+            .Filter
+                .column_filter
+            """
             class ConvertAndReplace:
+                """
+                knime2python.NodeRepository.Manipulation.ConvertAndReplace
+
+                .column_rename
+                """
                 @staticmethod
                 def column_rename(params, input_node):
                     input_table = input_node.output_table
                     return input_table.rename(index=str, columns=params["change_columns"])
 
             class Filter:
+                """
+                knime2python.NodeRepository.Manipulation.Filter
+
+                .column_filter
+                """
                 @staticmethod
                 def column_filter(params, input_node):
+                    """
+                    knime2python.NodeRepository.Manipulation.Filter.column_filter
+
+                    Parameters:
+                    include: list (of strings)
+                    """
                     return input_node.output_table.filter(items=params["include"])
 
         class Row:
+            """
+            knime2python.NodeRepository.Manipulation.Row
+
+            .Filter
+                .row_filter
+            .Transform
+                .group_by
+                .ungroup
+            .Other
+                .rule_engine
+            """
             class Filter:
+                """
+                knime2python.NodeRepository.Manipulation.Row.Filter
+
+                .row_filter
+                """
                 @staticmethod
                 def row_filter(params, input_node):
+                    """
+                    knime2python.NodeRepository.Manipulation.Row.Filter.row_filter
+
+                    Parameters:
+                    filter_criteria: str (2 options):
+                        include_rows_by_attribute_value
+                        exclude_rows_by_attribute_value
+                    column_to_test: str
+                    matching_criteria: str (3 options)
+                        only_missing_values_match
+                        use_range_checking (require additional parameters):
+                            lower_bound: int
+                            upper_bound: int
+                        use_pattern_matching (require additional parameters):
+                            pattern: str
+                    """
                     input_table = input_node.output_table
                     filter_criteria = params["filter_criteria"]
                     column_to_test = params["column_to_test"]
@@ -98,6 +240,12 @@ class NodeRepository:
                             return input_table[input_table[column_to_test] != pattern]
 
             class Transform:
+                """
+                knime2python.NodeRepository.Manipulation.Row.Transform
+
+                .group_by
+                .ungroup
+                """
                 @staticmethod
                 def group_by(params, input_node):
                     input_table = input_node.output_table
