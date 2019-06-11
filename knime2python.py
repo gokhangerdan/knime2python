@@ -7,6 +7,8 @@ from sklearn.cluster import KMeans
 import operator
 import sys
 import warnings
+import re
+import statistics
 
 
 warnings.filterwarnings("ignore")
@@ -14,88 +16,42 @@ sys.dont_write_bytecode = True
 
 
 class KnimeNode:
-    """
-    class knime2python.KnimeNode(func=None, params=None, input_node=None)
-
-    Parameters:
-    func: NodeRepository function (e.g. NodeRepository.IO.Read.csv_reader)
-    params: dict, default None
-    input_node: knime2python.KnimeNode, default None
-    """
-
     def __init__(self, func, params=None, input_node=None):
         self.output_table = func(params, input_node)
+        self.func = func
+        self.params = params
+        self.input_node = input_node
+        try:
+            self.sample = self.output_table.head()
+        except:
+            self.sample = None
+        try:
+            self.rows = len(self.output_table)
+        except:
+            self.rows = None
+        try:
+            self.columns = self.output_table.keys(), len(self.output_table.keys())
+        except:
+            self.columns = None
+        try:
+            self.clusters = self.output_table[0]
+        except:
+            self.cluster = None
+        try:
+            self.model = self.output_table[1]
+        except:
+            self.model = None
 
 
 class NodeRepository:
-    """
-    knime2python.NodeRepository
-
-    .IO
-        .Read
-            .csv_reader
-            .pmml_reader
-    .Manipulation
-        .Column
-            .ConvertAndReplace
-                .column_rename
-            .Filter
-                .column_filter
-        .Row
-            .Filter
-                .row_filter
-            .Transform
-                .group_by
-                .ungroup
-            .Other
-                .rule_engine
-    .OtherDataTypes
-        .TimeSeries
-            .Manipulate
-                .date_and_time_difference
-            .Transform
-                .string_to_date_and_time
-    .Analytics
-        .Mining
-            .Clustering
-                .cluster_assigner
-    .Scripting
-        .Python
-            .python_script
-    """
     class IO:
-        """
-        knime2python.NodeRepository.IO
-
-        .Read
-            .csv_reader
-            .pmml_reader
-        """
         class Read:
-            """
-            knime2python.IO.Read
-
-            .csv_reader
-            .pmml_reader
-            """
             @staticmethod
             def csv_reader(params, input_node):
-                """
-                knime2python.IO.Read.csv_reader
-
-                Parameters:
-                input_location: str
-                """
                 return pd.read_csv(params["input_location"])
 
             @staticmethod
             def pmml_reader(params, input_node):
-                """
-                knime2python.IO.Read.pmml_reader
-
-                Parameters:
-                input_location: str
-                """
                 xml_file = open(params["input_location"], "r").read()
                 a = dict(xmltodict.parse(xml_file))
                 clusters = a["PMML"]["ClusteringModel"]["Cluster"]
@@ -115,95 +71,66 @@ class NodeRepository:
                 return fields, kmeans
 
     class Manipulation:
-        """
-        knime2python.NodeRepository.Manipulation
-
-        .Column
-            .ConvertAndReplace
-                .column_rename
-            .Filter
-                .column_filter
-        .Row
-            .Filter
-                .row_filter
-            .Transform
-                .group_by
-                .ungroup
-            .Other
-                .rule_engine
-        """
         class Column:
-            """
-            knime2python.NodeRepository.Manipulation.Column
-
-            .ConvertAndReplace
-                .column_rename
-            .Filter
-                .column_filter
-            """
             class ConvertAndReplace:
-                """
-                knime2python.NodeRepository.Manipulation.ConvertAndReplace
-
-                .column_rename
-                """
                 @staticmethod
                 def column_rename(params, input_node):
                     input_table = input_node.output_table
                     return input_table.rename(index=str, columns=params["change_columns"])
 
             class Filter:
-                """
-                knime2python.NodeRepository.Manipulation.Filter
-
-                .column_filter
-                """
                 @staticmethod
                 def column_filter(params, input_node):
-                    """
-                    knime2python.NodeRepository.Manipulation.Filter.column_filter
-
-                    Parameters:
-                    include: list (of strings)
-                    """
                     return input_node.output_table.filter(items=params["include"])
 
+            class SplitAndCombine:
+                @staticmethod
+                def column_combiner(params, input_node):
+                    input_table = input_node.output_table
+                    delimiter = params["delimiter"]
+                    new_column = params["name_of_appended_column"]
+                    include = params["include"]
+                    input_table[new_column] = input_table[include].apply(
+                        lambda x: delimiter.join(x), axis=1)
+                    return input_table
+
+            class Transform:
+                @staticmethod
+                def missing_value(params, input_node):
+                    table = input_node.output_table
+                    option = params["option"]
+                    if option == "default":
+                        string = params["string"]
+                        value = params["value"]
+                        if string == "fix_value":
+                            return table.fillna(value)
+                    elif option == "column_settings":
+                        include = params["include"]
+                        value = params["value"]
+                        if value == "previous_value":
+                            previous_value = {}
+                            for column in include:
+                                previous_value[column] = None
+                            new_rows = []
+                            for index, row in table.iterrows():
+                                new = {}
+                                for column in table.keys():
+                                    if column in include:
+                                        if not pd.isnull(row[column]):
+                                            previous_value[column] = row[column]
+                                            new[column] = row[column]
+                                        else:
+                                            row[column] = previous_value[column]
+                                            new[column] = row[column]
+                                    else:
+                                        new[column] = row[column]
+                                new_rows.append(new)
+                            return pd.DataFrame(new_rows)
+
         class Row:
-            """
-            knime2python.NodeRepository.Manipulation.Row
-
-            .Filter
-                .row_filter
-            .Transform
-                .group_by
-                .ungroup
-            .Other
-                .rule_engine
-            """
             class Filter:
-                """
-                knime2python.NodeRepository.Manipulation.Row.Filter
-
-                .row_filter
-                """
                 @staticmethod
                 def row_filter(params, input_node):
-                    """
-                    knime2python.NodeRepository.Manipulation.Row.Filter.row_filter
-
-                    Parameters:
-                    filter_criteria: str (2 options):
-                        include_rows_by_attribute_value
-                        exclude_rows_by_attribute_value
-                    column_to_test: str
-                    matching_criteria: str (3 options)
-                        only_missing_values_match
-                        use_range_checking (require additional parameters):
-                            lower_bound: int
-                            upper_bound: int
-                        use_pattern_matching (require additional parameters):
-                            pattern: str
-                    """
                     input_table = input_node.output_table
                     filter_criteria = params["filter_criteria"]
                     column_to_test = params["column_to_test"]
@@ -221,8 +148,20 @@ class NodeRepository:
                             elif lower_bound == None and upper_bound != None:
                                 return input_table[input_table[column_to_test] <= upper_bound]
                         elif matching_criteria == "use_pattern_matching":
-                            pattern = params["pattern"]
-                            return input_table[input_table[column_to_test] == pattern]
+                            if "pattern" not in params.keys() and "regular_expression" in params.keys():
+                                def match_regex(x):
+                                    res = re.match(
+                                        params["regular_expression"], x)
+                                    if res:
+                                        return True
+                                    else:
+                                        return False
+                                input_table[column_to_test+"_match_regex"] = input_table[column_to_test].apply(
+                                    lambda x: match_regex(x))
+                                return input_table[input_table[column_to_test+"_match_regex"] == True].drop(columns=[column_to_test+"_match_regex"])
+                            else:
+                                pattern = params["pattern"]
+                                return input_table[input_table[column_to_test] == pattern]
                     elif filter_criteria == "exclude_rows_by_attribute_value":
                         if matching_criteria == "only_missing_values_match":
                             return input_table[input_table[column_to_test].notnull()]
@@ -236,16 +175,27 @@ class NodeRepository:
                             elif lower_bound == None and upper_bound != None:
                                 return input_table[input_table[column_to_test] > upper_bound]
                         elif matching_criteria == "use_pattern_matching":
-                            pattern = params["pattern"]
-                            return input_table[input_table[column_to_test] != pattern]
+                            if "pattern" not in params.keys() and "regular_expression" in params.keys():
+                                def match_regex(x):
+                                    res = re.match(
+                                        params["regular_expression"], x)
+                                    if res:
+                                        return True
+                                    else:
+                                        return False
+                                input_table[column_to_test+"_match_regex"] = input_table[column_to_test].apply(
+                                    lambda x: match_regex(x))
+                                return input_table[input_table[column_to_test+"_match_regex"] == False].drop(columns=[column_to_test+"_match_regex"])
+                            else:
+                                pattern = params["pattern"]
+                                return input_table[input_table[column_to_test] != pattern]
 
             class Transform:
-                """
-                knime2python.NodeRepository.Manipulation.Row.Transform
+                @staticmethod
+                def concatenate(params, input_node):
+                    if params["column_handling"] == "use_union_of_columns":
+                        return pd.concat([input_node[x].output_table for x in input_node.keys()])
 
-                .group_by
-                .ungroup
-                """
                 @staticmethod
                 def group_by(params, input_node):
                     input_table = input_node.output_table
@@ -264,12 +214,41 @@ class NodeRepository:
 
                     def union_count(x):
                         return len(sum(list(x), []))
+
+                    def concatenate(x):
+                        return ', '.join(list([str(i) for i in x]))
+
+                    def maximum(x):
+                        return max(list(x))
+
+                    def minimum(x):
+                        return min(list(x))
+
+                    def mean(x):
+                        return statistics.mean(list(x))
+
+                    def median(x):
+                        return statistics.median(list(x))
+
+                    def standard_deviation(x):
+                        data_list = list(x)
+                        if len(data_list) == 1:
+                            return 0
+                        else:
+                            return statistics.stdev(data_list)
+
                     aggregation = {
                         "list": list_agg,
                         "set": set_agg,
                         "unique_count": unique_count,
                         "append_elements": append_elements,
                         "union_count": union_count,
+                        "concatenate": concatenate,
+                        "maximum": maximum,
+                        "minimum": minimum,
+                        "mean": mean,
+                        "median": median,
+                        "standard_deviation": standard_deviation,
                     }
                     manuel_aggregation = params["manuel_aggregation"]
                     new_manuel_aggregation = {}
@@ -290,20 +269,24 @@ class NodeRepository:
 
                 @staticmethod
                 def ungroup(params, input_node):
-                    input_table = input_node.output_table
-                    include = params["include"]
-                    new_dataframe = []
-                    for i in range(len(input_table)):
-                        n = len(input_table[include[0]][i])
-                        for j in range(n):
-                            new_row = {}
-                            for k in input_table.keys():
-                                if type(input_table[k][i]) == list:
-                                    new_row[k] = input_table[k][i][j]
+                    table = input_node.output_table
+                    ungroup_columns = params["include"]
+                    new_rows = []
+                    for index, row in table.iterrows():
+                        max_length = max([len(cell)
+                                          for cell in row if type(cell) is list])
+                        for new_row in range(max_length):
+                            new = {}
+                            for column in table.keys():
+                                if column not in ungroup_columns or type(row[column]) is not list:
+                                    new[column] = row[column]
                                 else:
-                                    new_row[k] = input_table[k][i]
-                            new_dataframe.append(new_row)
-                    return pd.DataFrame(new_dataframe)
+                                    try:
+                                        new[column] = row[column][new_row]
+                                    except IndexError:
+                                        new[column] = None
+                            new_rows.append(new)
+                    return pd.DataFrame(new_rows)
 
             class Other:
                 @staticmethod
@@ -319,9 +302,17 @@ class NodeRepository:
                         "<=": operator.le,
                         ">=": operator.ge,
                     }
-                    for i in expression:
-                        input_table.loc[operator_dict[i[1]](
-                            input_table[i[0]], i[2]), append_column] = i[4]
+
+                    def rule_apply(row, expression, operator_dict=operator_dict):
+                        true_false = False
+                        for i in expression:
+                            if operator_dict[i[1]](row[i[0]], i[2]):
+                                true_false = True
+                                return i[4]
+                        if not true_false:
+                            return None
+                    input_table[append_column] = input_table.apply(
+                        lambda row: rule_apply(row, expression), axis=1)
                     return input_table
 
     class OtherDataTypes:
@@ -364,11 +355,7 @@ class NodeRepository:
                     port_1 = input_node["port_1"].output_table
                     labels = port_0[1].fit(
                         port_1.as_matrix(columns=port_0[0])).labels_
-                    cnt = []
-                    for i in port_1.keys():
-                        if i != "Cluster" and "Cluster" in i:
-                            cnt.append(i)
-                    cluster_col_name = "Cluster_" + str(len(cnt))
+                    cluster_col_name = params["new_column"]
                     labels = pd.DataFrame(labels, columns=[cluster_col_name])
                     elements = list(set(labels[cluster_col_name].tolist()))
                     elements.sort()
@@ -378,6 +365,11 @@ class NodeRepository:
 
     class Scripting:
         class Python:
+            @staticmethod
+            def python_source(params, input_node):
+                script = __import__(params["script"])
+                return script.foo()
+
             @staticmethod
             def python_script(params, input_node):
                 input_table = input_node.output_table
